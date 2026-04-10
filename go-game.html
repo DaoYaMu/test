@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>围棋 - 9x9</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stone {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        .stone.black {
+            background: radial-gradient(circle at 30% 30%, #4a4a4a, #000);
+        }
+
+        .stone.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+            border: 1px solid #999;
+        }
+
+        .current-player {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .board-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        #board {
+            background: #dcb35c;
+            border: 3px solid #8b6914;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+            border: 2px solid #e9ecef;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .message {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.win {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.lose {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .score {
+            font-size: 1.2em;
+            margin-left: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>围棋 9×9</h1>
+        
+        <div class="game-info">
+            <div class="player-info">
+                <div class="stone black"></div>
+                <span>玩家 (黑棋)</span>
+                <span class="score" id="black-score">提子: 0</span>
+            </div>
+            <div class="player-info">
+                <div class="stone white"></div>
+                <span>电脑 (白棋)</span>
+                <span class="score" id="white-score">提子: 0</span>
+            </div>
+        </div>
+
+        <div class="board-container">
+            <canvas id="board" width="450" height="450"></canvas>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="newGame()">新游戏</button>
+            <button class="btn-secondary" onclick="passTurn()">停一手</button>
+            <button class="btn-secondary" onclick="undoMove()">悔棋</button>
+        </div>
+
+        <div class="message" id="message"></div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 9;
+        const CELL_SIZE = 50;
+        const PADDING = 25;
+        
+        let board = [];
+        let currentPlayer = 'black';
+        let moveHistory = [];
+        let capturedStones = { black: 0, white: 0 };
+        let gameOver = false;
+        let consecutivePasses = 0;
+
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
+        const messageEl = document.getElementById('message');
+        const blackScoreEl = document.getElementById('black-score');
+        const whiteScoreEl = document.getElementById('white-score');
+
+        function initBoard() {
+            board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+        }
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            ctx.fillStyle = '#dcb35c';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#8b6914';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                // Horizontal lines
+                ctx.beginPath();
+                ctx.moveTo(PADDING, PADDING + i * CELL_SIZE);
+                ctx.lineTo(PADDING + (BOARD_SIZE - 1) * CELL_SIZE, PADDING + i * CELL_SIZE);
+                ctx.stroke();
+                
+                // Vertical lines
+                ctx.beginPath();
+                ctx.moveTo(PADDING + i * CELL_SIZE, PADDING);
+                ctx.lineTo(PADDING + i * CELL_SIZE, PADDING + (BOARD_SIZE - 1) * CELL_SIZE);
+                ctx.stroke();
+            }
+            
+            // Draw star points (for 9x9 board)
+            const starPoints = [[2, 2], [2, 6], [6, 2], [6, 6], [4, 4]];
+            ctx.fillStyle = '#8b6914';
+            starPoints.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.arc(PADDING + x * CELL_SIZE, PADDING + y * CELL_SIZE, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw stones
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                for (let x = 0; x < BOARD_SIZE; x++) {
+                    if (board[y][x]) {
+                        drawStone(x, y, board[y][x]);
+                    }
+                }
+            }
+        }
+
+        function drawStone(x, y, color) {
+            const centerX = PADDING + x * CELL_SIZE;
+            const centerY = PADDING + y * CELL_SIZE;
+            const radius = CELL_SIZE / 2 - 2;
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            
+            if (color === 'black') {
+                const gradient = ctx.createRadialGradient(
+                    centerX - radius/3, centerY - radius/3, 0,
+                    centerX, centerY, radius
+                );
+                gradient.addColorStop(0, '#4a4a4a');
+                gradient.addColorStop(1, '#000');
+                ctx.fillStyle = gradient;
+            } else {
+                const gradient = ctx.createRadialGradient(
+                    centerX - radius/3, centerY - radius/3, 0,
+                    centerX, centerY, radius
+                );
+                gradient.addColorStop(0, '#fff');
+                gradient.addColorStop(1, '#ccc');
+                ctx.fillStyle = gradient;
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            
+            ctx.fill();
+            
+            // Add shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+        }
+
+        function getGroup(x, y, color) {
+            const group = [];
+            const visited = new Set();
+            const queue = [[x, y]];
+            
+            while (queue.length > 0) {
+                const [cx, cy] = queue.shift();
+                const key = `${cx},${cy}`;
+                
+                if (visited.has(key)) continue;
+                if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) continue;
+                if (board[cy][cx] !== color) continue;
+                
+                visited.add(key);
+                group.push([cx, cy]);
+                
+                // Check adjacent intersections
+                queue.push([cx + 1, cy]);
+                queue.push([cx - 1, cy]);
+                queue.push([cx, cy + 1]);
+                queue.push([cx, cy - 1]);
+            }
+            
+            return group;
+        }
+
+        function getLiberties(group) {
+            const liberties = new Set();
+            
+            group.forEach(([x, y]) => {
+                const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                directions.forEach(([dx, dy]) => {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    
+                    if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                        if (board[ny][nx] === null) {
+                            liberties.add(`${nx},${ny}`);
+                        }
+                    }
+                });
+            });
+            
+            return liberties.size;
+        }
+
+        function removeGroup(group) {
+            group.forEach(([x, y]) => {
+                board[y][x] = null;
+            });
+        }
+
+        function isValidMove(x, y, color) {
+            if (board[y][x] !== null) return false;
+            
+            // Try the move temporarily
+            board[y][x] = color;
+            
+            // Check if the move captures any opponent stones
+            const opponent = color === 'black' ? 'white' : 'black';
+            const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            let captures = false;
+            
+            for (const [dx, dy] of directions) {
+                const nx = x + dx;
+                const ny = y + dy;
+                
+                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                    if (board[ny][nx] === opponent) {
+                        const group = getGroup(nx, ny, opponent);
+                        if (getLiberties(group) === 0) {
+                            captures = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // If no captures, check if the placed stone has liberties
+            if (!captures) {
+                const ownGroup = getGroup(x, y, color);
+                if (getLiberties(ownGroup) === 0) {
+                    board[y][x] = null; // Undo temporary move
+                    return false;
+                }
+            }
+            
+            board[y][x] = null; // Undo temporary move
+            return true;
+        }
+
+        function makeMove(x, y, color) {
+            if (!isValidMove(x, y, color)) return false;
+            
+            // Save state for undo
+            moveHistory.push({
+                board: board.map(row => [...row]),
+                player: currentPlayer,
+                captured: { ...capturedStones }
+            });
+            
+            board[y][x] = color;
+            
+            // Check for captures
+            const opponent = color === 'black' ? 'white' : 'black';
+            const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            
+            for (const [dx, dy] of directions) {
+                const nx = x + dx;
+                const ny = y + dy;
+                
+                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                    if (board[ny][nx] === opponent) {
+                        const group = getGroup(nx, ny, opponent);
+                        if (getLiberties(group) === 0) {
+                            removeGroup(group);
+                            capturedStones[color] += group.length;
+                        }
+                    }
+                }
+            }
+            
+            consecutivePasses = 0;
+            currentPlayer = opponent;
+            updateUI();
+            drawBoard();
+            
+            // Check for game end
+            if (consecutivePasses >= 2) {
+                endGame();
+            } else if (currentPlayer === 'white' && !gameOver) {
+                setTimeout(computerMove, 500);
+            }
+            
+            return true;
+        }
+
+        function computerMove() {
+            if (gameOver) return;
+            
+            // Simple AI: try to find a good move
+            const validMoves = [];
+            
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                for (let x = 0; x < BOARD_SIZE; x++) {
+                    if (isValidMove(x, y, 'white')) {
+                        validMoves.push({ x, y, score: evaluateMove(x, y, 'white') });
+                    }
+                }
+            }
+            
+            if (validMoves.length === 0) {
+                passTurn();
+                return;
+            }
+            
+            // Sort by score and pick one of the best moves
+            validMoves.sort((a, b) => b.score - a.score);
+            const bestScore = validMoves[0].score;
+            const bestMoves = validMoves.filter(move => move.score === bestScore);
+            const selectedMove = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            
+            makeMove(selectedMove.x, selectedMove.y, 'white');
+        }
+
+        function evaluateMove(x, y, color) {
+            let score = 0;
+            
+            // Temporarily make the move
+            board[y][x] = color;
+            
+            // Evaluate capture potential
+            const opponent = color === 'black' ? 'white' : 'black';
+            const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            
+            for (const [dx, dy] of directions) {
+                const nx = x + dx;
+                const ny = y + dy;
+                
+                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                    if (board[ny][nx] === opponent) {
+                        const group = getGroup(nx, ny, opponent);
+                        const liberties = getLiberties(group);
+                        if (liberties === 1) {
+                            score += 10; // Can capture
+                        }
+                    }
+                }
+            }
+            
+            // Evaluate own group safety
+            const ownGroup = getGroup(x, y, color);
+            const ownLiberties = getLiberties(ownGroup);
+            score += ownLiberties * 2;
+            
+            // Prefer center positions
+            const center = BOARD_SIZE / 2;
+            const distFromCenter = Math.abs(x - center) + Math.abs(y - center);
+            score += (BOARD_SIZE - distFromCenter);
+            
+            // Undo temporary move
+            board[y][x] = null;
+            
+            return score;
+        }
+
+        function handleClick(e) {
+            if (gameOver || currentPlayer !== 'black') return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = Math.round((e.clientX - rect.left) * scaleX - PADDING) / CELL_SIZE;
+            const y = Math.round((e.clientY - rect.top) * scaleY - PADDING) / CELL_SIZE;
+            
+            if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+                makeMove(Math.round(x), Math.round(y), 'black');
+            }
+        }
+
+        function passTurn() {
+            if (gameOver) return;
+            
+            moveHistory.push({
+                board: board.map(row => [...row]),
+                player: currentPlayer,
+                captured: { ...capturedStones }
+            });
+            
+            consecutivePasses++;
+            currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+            updateUI();
+            
+            if (consecutivePasses >= 2) {
+                endGame();
+            } else if (currentPlayer === 'white' && !gameOver) {
+                setTimeout(computerMove, 500);
+            }
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0 || gameOver) return;
+            
+            // Undo two moves (player and computer)
+            if (moveHistory.length >= 2) {
+                const prevState = moveHistory[moveHistory.length - 2];
+                board = prevState.board.map(row => [...row]);
+                capturedStones = { ...prevState.captured };
+                currentPlayer = 'black';
+                moveHistory = moveHistory.slice(0, -2);
+                consecutivePasses = 0;
+                gameOver = false;
+                hideMessage();
+                updateUI();
+                drawBoard();
+            } else if (moveHistory.length === 1) {
+                const prevState = moveHistory[0];
+                board = prevState.board.map(row => [...row]);
+                capturedStones = { ...prevState.captured };
+                currentPlayer = 'black';
+                moveHistory = [];
+                consecutivePasses = 0;
+                gameOver = false;
+                hideMessage();
+                updateUI();
+                drawBoard();
+            }
+        }
+
+        function endGame() {
+            gameOver = true;
+            
+            // Simple scoring: count territories + captured stones
+            let blackTerritory = 0;
+            let whiteTerritory = 0;
+            
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                for (let x = 0; x < BOARD_SIZE; x++) {
+                    if (board[y][x] === null) {
+                        // Simple territory counting (could be improved)
+                        const blackNearby = hasNearbyStone(x, y, 'black');
+                        const whiteNearby = hasNearbyStone(x, y, 'white');
+                        
+                        if (blackNearby && !whiteNearby) blackTerritory++;
+                        else if (whiteNearby && !blackNearby) whiteTerritory++;
+                    }
+                }
+            }
+            
+            const blackTotal = blackTerritory + capturedStones.black;
+            const whiteTotal = whiteTerritory + capturedStones.white + 6.5; // Komi
+            
+            let resultMsg, resultClass;
+            if (blackTotal > whiteTotal) {
+                resultMsg = `恭喜！你赢了！\n黑棋: ${blackTotal.toFixed(1)} 目 | 白棋: ${whiteTotal.toFixed(1)} 目`;
+                resultClass = 'win';
+            } else {
+                resultMsg = `很遗憾，电脑赢了。\n黑棋: ${blackTotal.toFixed(1)} 目 | 白棋: ${whiteTotal.toFixed(1)} 目`;
+                resultClass = 'lose';
+            }
+            
+            showMessage(resultMsg, resultClass);
+        }
+
+        function hasNearbyStone(x, y, color) {
+            const visited = new Set();
+            const queue = [[x, y]];
+            
+            while (queue.length > 0) {
+                const [cx, cy] = queue.shift();
+                const key = `${cx},${cy}`;
+                
+                if (visited.has(key)) continue;
+                if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) continue;
+                
+                visited.add(key);
+                
+                if (board[cy][cx] === color) return true;
+                if (board[cy][cx] !== null) continue;
+                
+                queue.push([cx + 1, cy]);
+                queue.push([cx - 1, cy]);
+                queue.push([cx, cy + 1]);
+                queue.push([cx, cy - 1]);
+            }
+            
+            return false;
+        }
+
+        function updateUI() {
+            blackScoreEl.textContent = `提子: ${capturedStones.black}`;
+            whiteScoreEl.textContent = `提子: ${capturedStones.white}`;
+            
+            const playerEls = document.querySelectorAll('.player-info');
+            playerEls.forEach(el => el.classList.remove('current-player'));
+            
+            if (currentPlayer === 'black') {
+                playerEls[0].classList.add('current-player');
+            } else {
+                playerEls[1].classList.add('current-player');
+            }
+        }
+
+        function showMessage(text, type) {
+            messageEl.textContent = text;
+            messageEl.className = `message show ${type}`;
+        }
+
+        function hideMessage() {
+            messageEl.className = 'message';
+        }
+
+        function newGame() {
+            initBoard();
+            currentPlayer = 'black';
+            moveHistory = [];
+            capturedStones = { black: 0, white: 0 };
+            gameOver = false;
+            consecutivePasses = 0;
+            hideMessage();
+            updateUI();
+            drawBoard();
+        }
+
+        // Initialize game
+        canvas.addEventListener('click', handleClick);
+        newGame();
+    </script>
+</body>
+</html>
